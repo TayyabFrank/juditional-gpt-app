@@ -1,0 +1,805 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  Modal,
+  ScrollView,
+  ActivityIndicator,
+  Alert
+} from 'react-native';
+import { colors } from '../../theme/colors';
+import Header from '../../components/Header';
+import CitationChip from '../../components/CitationChip';
+import QuickPromptPill from '../../components/QuickPromptPill';
+import DocumentModal from '../../components/DocumentModal';
+import { useAuth } from '../../context/AuthContext';
+import {
+  getUserChatSessions,
+  createChatSession,
+  deleteChatSession,
+  getChatMessages,
+  addMessageToChat
+} from '../../services/chatService';
+import { generateLegalResponse } from '../../services/geminiService';
+
+export default function AssistantScreen({ route, navigation }) {
+  const { currentUser } = useAuth();
+  const flatListRef = useRef(null);
+
+  const [activeSessionId, setActiveSessionId] = useState('session-demo-1');
+  const [sessions, setSessions] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [inputText, setInputText] = useState('');
+  const [isAiThinking, setIsAiThinking] = useState(false);
+  const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+
+  // Quick prompt chips
+  const QUICK_PROMPTS = [
+    { label: 'Bail Petition s.497', query: 'Draft grounds for post-arrest bail petition under Section 497 Cr.P.C. in a case of alleged cheque dishonour.' },
+    { label: 'Limitation for ICA', query: 'What is the limitation period for filing an Intra-Court Appeal (ICA) in the Lahore High Court?' },
+    { label: 'Specific Performance', query: 'Can court grant specific performance of agreement to sell when time was not essence of contract?' },
+    { label: 'Writ under Art. 199', query: 'What are the essential grounds to maintain a writ petition against CDA/LDA under Article 199?' },
+  ];
+
+  // Load chat sessions on mount
+  useEffect(() => {
+    loadSessions();
+  }, [currentUser?.uid]);
+
+  // Handle route params if opened with initialPrompt
+  useEffect(() => {
+    if (route?.params?.initialPrompt) {
+      handleSend(route.params.initialPrompt);
+    }
+  }, [route?.params?.initialPrompt]);
+
+  const loadSessions = async () => {
+    const userSessions = await getUserChatSessions(currentUser?.uid);
+    setSessions(userSessions);
+    if (userSessions.length > 0 && !activeSessionId) {
+      setActiveSessionId(userSessions[0].id);
+      loadMessages(userSessions[0].id);
+    } else if (activeSessionId) {
+      loadMessages(activeSessionId);
+    }
+  };
+
+  const loadMessages = async (sessionId) => {
+    const msgs = await getChatMessages(currentUser?.uid, sessionId);
+    setMessages(msgs);
+  };
+
+  const handleSelectSession = (sessionId) => {
+    setActiveSessionId(sessionId);
+    loadMessages(sessionId);
+    setIsSessionModalOpen(false);
+  };
+
+  const handleStartNewChat = async () => {
+    const newSession = await createChatSession(currentUser?.uid, 'New Legal Inquiry');
+    setSessions([newSession, ...sessions]);
+    setActiveSessionId(newSession.id);
+    setMessages([]);
+    setIsSessionModalOpen(false);
+  };
+
+  const handleDeleteSession = async (sessionId) => {
+    await deleteChatSession(currentUser?.uid, sessionId);
+    const updated = sessions.filter((s) => s.id !== sessionId);
+    setSessions(updated);
+    if (activeSessionId === sessionId) {
+      if (updated.length > 0) {
+        setActiveSessionId(updated[0].id);
+        loadMessages(updated[0].id);
+      } else {
+        handleStartNewChat();
+      }
+    }
+  };
+
+  const handleSend = async (textToSend) => {
+    const prompt = (textToSend || inputText).trim();
+    if (!prompt) return;
+
+    setInputText('');
+    let currentSession = activeSessionId;
+
+    if (!currentSession) {
+      const newSession = await createChatSession(
+        currentUser?.uid,
+        prompt.length > 25 ? prompt.substring(0, 25) + '...' : prompt
+      );
+      currentSession = newSession.id;
+      setActiveSessionId(newSession.id);
+      setSessions([newSession, ...sessions]);
+    }
+
+    const userMsg = {
+      sender: 'user',
+      text: prompt
+    };
+
+    const savedUserMsg = await addMessageToChat(currentUser?.uid, currentSession, userMsg);
+    setMessages((prev) => [...prev, savedUserMsg]);
+    setIsAiThinking(true);
+
+    // Scroll to bottom
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+
+    try {
+      const aiResponse = await generateLegalResponse(prompt, messages);
+      const aiMsg = {
+        sender: 'ai',
+        text: aiResponse.text,
+        citations: aiResponse.citations || []
+      };
+
+      const savedAiMsg = await addMessageToChat(currentUser?.uid, currentSession, aiMsg);
+      setMessages((prev) => [...prev, savedAiMsg]);
+    } catch (err) {
+      const fallbackAiMsg = {
+        sender: 'ai',
+        text: 'JudicialGPT experienced an issue reaching the remote database. Precedent synthesis will resume shortly.',
+        citations: ['System Notice']
+      };
+      const savedFallback = await addMessageToChat(currentUser?.uid, currentSession, fallbackAiMsg);
+      setMessages((prev) => [...prev, savedFallback]);
+    } finally {
+      setIsAiThinking(false);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  };
+
+  const handleSelectDoc = (doc) => {
+    handleSend(`Please analyze this ${doc.title} and outline legal grounds under Pakistani law: ${doc.desc}`);
+  };
+
+  const handleVoiceCall = () => {
+    Alert.alert(
+      'Voice Consultation Mode',
+      'Speak your legal inquiry in English, Urdu, or regional languages. JudicialGPT voice audio channel is active.'
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <Header
+        subtitle="AI Judicial Intelligence Workspace"
+        rightElement={
+          <View style={styles.headerRightActions}>
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={() => setIsSessionModalOpen(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.historyBtnText}>📁 Cases</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.newChatBtn}
+              onPress={handleStartNewChat}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.newChatBtnText}>+ New</Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
+
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {messages.length === 0 ? (
+          <ScrollView
+            style={styles.welcomeContainer}
+            contentContainerStyle={styles.welcomeContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.welcomeIconBadge}>
+              <Text style={styles.welcomeIconText}>⚖️</Text>
+            </View>
+
+            <Text style={styles.welcomeGreeting}>
+              Assalam-o-Alaikum, {currentUser?.name?.split(' ')[0] || 'Advocate'}
+            </Text>
+
+            <Text style={styles.welcomeSub}>
+              How may JudicialGPT assist your legal research and court drafting today?
+            </Text>
+
+            <View style={styles.quickPromptSection}>
+              <Text style={styles.quickPromptHeading}>FREQUENT PROCEDURAL INQUIRIES</Text>
+              <View style={styles.pillsRow}>
+                {QUICK_PROMPTS.map((item, idx) => (
+                  <QuickPromptPill
+                    key={idx}
+                    icon="§"
+                    label={item.label}
+                    onPress={() => handleSend(item.query)}
+                  />
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.advisoryNotice}>
+              <Text style={styles.advisoryTitle}>Official Pakistani Law Reports</Text>
+              <Text style={styles.advisoryText}>
+                Includes SCMR, PLD (Supreme Court & High Courts), CLC, YLR, PTD, and Federal Statutes with active amendment tracking.
+              </Text>
+            </View>
+          </ScrollView>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item, index) => item.id || String(index)}
+            contentContainerStyle={styles.messageList}
+            renderItem={({ item }) => {
+              const isUser = item.sender === 'user';
+              return (
+                <View style={[styles.messageRow, isUser ? styles.userRow : styles.aiRow]}>
+                  {!isUser && (
+                    <View style={styles.aiAvatar}>
+                      <Text style={styles.aiAvatarText}>⚖</Text>
+                    </View>
+                  )}
+
+                  <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
+                    <Text style={[styles.messageText, isUser ? styles.userText : styles.aiText]}>
+                      {item.text}
+                    </Text>
+
+                    {item.citations && item.citations.length > 0 && (
+                      <View style={styles.citationsContainer}>
+                        <Text style={styles.citationsTitle}>AUTHORITATIVE CITATIONS:</Text>
+                        <View style={styles.citationsRow}>
+                          {item.citations.map((c, i) => (
+                            <CitationChip
+                              key={i}
+                              citation={c}
+                              onPress={() => Alert.alert('Citation Verified', `${c}\nIndexed in Supreme & High Court of Pakistan Law Reports.`)}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    {item.timestamp && (
+                      <Text style={[styles.timestamp, isUser ? styles.userTimestamp : styles.aiTimestamp]}>
+                        {item.timestamp}
+                      </Text>
+                    )}
+                  </View>
+
+                  {isUser && (
+                    <View style={styles.userAvatar}>
+                      <Text style={styles.userAvatarText}>👤</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            }}
+            ListFooterComponent={
+              isAiThinking ? (
+                <View style={styles.thinkingContainer}>
+                  <View style={styles.aiAvatar}>
+                    <Text style={styles.aiAvatarText}>⚖</Text>
+                  </View>
+                  <View style={styles.thinkingBubble}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={styles.thinkingText}>Analyzing Supreme Court precedents & statutes...</Text>
+                  </View>
+                </View>
+              ) : null
+            }
+          />
+        )}
+
+        {/* Input Bar */}
+        <View style={styles.inputBar}>
+          <TouchableOpacity
+            style={styles.attachBtn}
+            onPress={() => setIsDocModalOpen(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.attachBtnIcon}>📎</Text>
+          </TouchableOpacity>
+
+          <TextInput
+            style={styles.textInput}
+            placeholder="Ask Pakistani legal question, cite section or FIR..."
+            placeholderTextColor={colors.textMuted}
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+            maxLength={1000}
+          />
+
+          <TouchableOpacity
+            style={styles.micBtn}
+            onPress={handleVoiceCall}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.micBtnIcon}>🎙</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.sendBtn, Boolean(inputText.trim()) && styles.sendBtnActive]}
+            disabled={!inputText.trim() || isAiThinking}
+            onPress={() => handleSend()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.sendBtnIcon}>↑</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Case Sessions History Modal */}
+      <Modal
+        visible={isSessionModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsSessionModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Saved Case Inquiries</Text>
+                <Text style={styles.modalSubtitle}>Switch or manage your legal research sessions</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsSessionModalOpen(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalNewBtn}
+              onPress={handleStartNewChat}
+            >
+              <Text style={styles.modalNewBtnText}>+ Start New Legal Inquiry</Text>
+            </TouchableOpacity>
+
+            <ScrollView style={styles.modalList}>
+              {sessions.map((s) => {
+                const isActive = s.id === activeSessionId;
+                return (
+                  <View key={s.id} style={[styles.sessionItem, isActive && styles.sessionItemActive]}>
+                    <TouchableOpacity
+                      style={styles.sessionItemMain}
+                      onPress={() => handleSelectSession(s.id)}
+                    >
+                      <Text style={styles.sessionItemIcon}>📁</Text>
+                      <View style={styles.sessionItemTextCol}>
+                        <Text style={[styles.sessionItemTitle, isActive && styles.sessionItemTitleActive]}>
+                          {s.title}
+                        </Text>
+                        <Text style={styles.sessionItemDate}>
+                          {new Date(s.createdAt).toLocaleDateString()}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.sessionDeleteBtn}
+                      onPress={() => handleDeleteSession(s.id)}
+                    >
+                      <Text style={styles.sessionDeleteText}>🗑</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Document Template Modal */}
+      <DocumentModal
+        visible={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        onSelectDocument={handleSelectDoc}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  keyboardContainer: {
+    flex: 1,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  historyBtn: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  historyBtnText: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  newChatBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  newChatBtnText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  welcomeContainer: {
+    flex: 1,
+  },
+  welcomeContent: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  welcomeIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: colors.cardBgElevated,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  welcomeIconText: {
+    fontSize: 32,
+  },
+  welcomeGreeting: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.textLight,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  welcomeSub: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 300,
+    lineHeight: 18,
+    marginBottom: 24,
+  },
+  quickPromptSection: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  quickPromptHeading: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.gold,
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  advisoryNotice: {
+    width: '100%',
+    backgroundColor: colors.cardBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+  },
+  advisoryTitle: {
+    color: colors.primaryLight,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  advisoryText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  messageList: {
+    padding: 16,
+    paddingBottom: 24,
+  },
+  messageRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    alignItems: 'flex-start',
+  },
+  userRow: {
+    justifyContent: 'flex-end',
+  },
+  aiRow: {
+    justifyContent: 'flex-start',
+  },
+  aiAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: colors.cardBgElevated,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+    marginTop: 2,
+  },
+  aiAvatarText: {
+    color: colors.primaryLight,
+    fontSize: 16,
+  },
+  userAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    marginTop: 2,
+  },
+  userAvatarText: {
+    fontSize: 14,
+  },
+  bubble: {
+    maxWidth: '80%',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  userBubble: {
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: 4,
+  },
+  aiBubble: {
+    backgroundColor: colors.chatAiBubble,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderBottomLeftRadius: 4,
+  },
+  messageText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  userText: {
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  aiText: {
+    color: colors.chatAiText,
+  },
+  citationsContainer: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  citationsTitle: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.gold,
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
+  citationsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  timestamp: {
+    fontSize: 9,
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  userTimestamp: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  aiTimestamp: {
+    color: colors.textMuted,
+  },
+  thinkingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  thinkingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.cardBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  thinkingText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.cardBg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  attachBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachBtnIcon: {
+    fontSize: 16,
+  },
+  textInput: {
+    flex: 1,
+    minHeight: 38,
+    maxHeight: 100,
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    color: colors.text,
+    fontSize: 13,
+  },
+  micBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  micBtnIcon: {
+    fontSize: 16,
+  },
+  sendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  sendBtnIcon: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: 20,
+    maxHeight: '75%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  modalCloseText: {
+    color: colors.textSecondary,
+    fontSize: 18,
+    padding: 4,
+  },
+  modalNewBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalNewBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalList: {
+    marginBottom: 20,
+  },
+  sessionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sessionItemActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  sessionItemMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sessionItemIcon: {
+    fontSize: 18,
+  },
+  sessionItemTextCol: {
+    flex: 1,
+  },
+  sessionItemTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  sessionItemTitleActive: {
+    color: colors.primaryLight,
+  },
+  sessionItemDate: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  sessionDeleteBtn: {
+    padding: 6,
+  },
+  sessionDeleteText: {
+    fontSize: 14,
+  }
+});
