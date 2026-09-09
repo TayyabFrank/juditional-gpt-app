@@ -74,48 +74,96 @@ export default function ProfileScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* User ID Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarRow}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarLetter}>
-                {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'A'}
-              </Text>
-            </View>
-
-            <View style={styles.avatarTextCol}>
-              <View style={styles.nameRow}>
-                <Text style={styles.userName}>{currentUser?.name || 'Advocate Tayyab'}</Text>
-                <View style={styles.verifiedBadge}>
-                  <Text style={styles.verifiedText}>✓ VERIFIED</Text>
-                </View>
+        {currentUser ? (
+          <View style={styles.profileCard}>
+            <View style={styles.avatarRow}>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarLetter}>
+                  {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'A'}
+                </Text>
               </View>
-              <Text style={styles.userRole}>{currentUser?.role || 'Advocate High Court'}</Text>
-              <Text style={styles.userEmail}>{currentUser?.email || 'tayyab.advocate@judicialgpt.pk'}</Text>
+
+              <View style={styles.avatarTextCol}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.userName}>{currentUser?.name || 'Advocate'}</Text>
+                  <View style={styles.verifiedBadge}>
+                    <Text style={styles.verifiedText}>✓ VERIFIED</Text>
+                  </View>
+                </View>
+                <Text style={styles.userRole}>{currentUser?.role || 'Advocate High Court'}</Text>
+                <Text style={styles.userEmail}>{currentUser?.email || 'advocate@judicialgpt.pk'}</Text>
+              </View>
+            </View>
+
+            {/* Bar Council License Strip */}
+            <View style={styles.licenseStrip}>
+              <Text style={styles.licenseLabel}>ACCOUNT USER ID:</Text>
+              <Text style={styles.licenseValue}>{currentUser?.uid || 'adv-id'}</Text>
             </View>
           </View>
+        ) : (
+          <View style={styles.profileCard}>
+            <View style={styles.avatarRow}>
+              <View style={[styles.avatarCircle, { borderColor: colors.gold, backgroundColor: 'rgba(217, 119, 6, 0.15)' }]}>
+                <Text style={[styles.avatarLetter, { color: colors.gold }]}>👤</Text>
+              </View>
+              <View style={styles.avatarTextCol}>
+                <Text style={styles.userName}>Guest Jurist</Text>
+                <Text style={styles.userRole}>Preview Mode (Not Signed In)</Text>
+                <Text style={styles.userEmail}>Sign in to save research history</Text>
+              </View>
+            </View>
 
-          {/* Bar Council License Strip */}
-          <View style={styles.licenseStrip}>
-            <Text style={styles.licenseLabel}>ACCOUNT USER ID:</Text>
-            <Text style={styles.licenseValue}>{currentUser?.uid || 'adv-tayyab-786'}</Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+              <TouchableOpacity
+                style={[styles.openChatbotBtn, { paddingVertical: 10 }]}
+                onPress={() => navigation.navigate('Login')}
+              >
+                <Text style={styles.openChatbotBtnText}>Sign In to Account</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.clearHistoryBtn, { paddingVertical: 10, borderColor: colors.primary, flex: 1 }]}
+                onPress={() => navigation.navigate('Signup')}
+              >
+                <Text style={[styles.clearHistoryBtnText, { color: colors.primaryLight }]}>Register</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Saved Chat History Section for This Account */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>SAVED CHAT HISTORY IN THIS ACCOUNT</Text>
-            <View style={styles.historyBadge}>
-              <Text style={styles.historyBadgeText}>{userSessions.length} Case Inquiries</Text>
-            </View>
+            {currentUser && (
+              <View style={styles.historyBadge}>
+                <Text style={styles.historyBadgeText}>{userSessions.length} Case Inquiries</Text>
+              </View>
+            )}
           </View>
 
-          <Text style={styles.accountHintText}>
-            All chats, precedents & legal responses are automatically stored in your account:
-            {' '}<Text style={styles.highlightText}>{currentUser?.email || 'Active Account'}</Text>
-          </Text>
+          {!currentUser ? (
+            <View style={styles.emptyHistoryCard}>
+              <Text style={styles.emptyHistoryIcon}>🔒</Text>
+              <Text style={styles.emptyHistoryTitle}>Personal Account Required</Text>
+              <Text style={styles.emptyHistorySubtitle}>
+                Sign in or register your advocate profile to consult the AI and automatically save all your research history.
+              </Text>
+              <TouchableOpacity
+                style={styles.startInquiryBtn}
+                onPress={() => navigation.navigate('Login')}
+              >
+                <Text style={styles.startInquiryBtnText}>Sign In to View History</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.accountHintText}>
+                All chats, precedents & legal responses are automatically stored in your account:
+                {' '}<Text style={styles.highlightText}>{currentUser?.email || 'Active Account'}</Text>
+              </Text>
 
-          {userSessions.length > 0 ? (
+              {userSessions.length > 0 ? (
             <View style={styles.historyCard}>
               {userSessions.map((session, index) => {
                 const msgCount = session.messages ? session.messages.length : 0;
@@ -200,6 +248,8 @@ export default function ProfileScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           )}
+            </>
+          )}
         </View>
 
         {/* Quick Role Switcher for Testing */}
@@ -271,7 +321,9 @@ export default function ProfileScreen({ navigation }) {
             style={styles.actionBtn}
             onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.actionBtnText}>Sign In to Another Account</Text>
+            <Text style={styles.actionBtnText}>
+              {currentUser ? 'Sign In to Another Account' : 'Sign In to Advocate Account'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -281,12 +333,14 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.actionBtnText}>Create New Advocate Profile</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.signOutBtn}
-            onPress={handleSignOut}
-          >
-            <Text style={styles.signOutBtnText}>Sign Out of Mobile App</Text>
-          </TouchableOpacity>
+          {currentUser && (
+            <TouchableOpacity
+              style={styles.signOutBtn}
+              onPress={handleSignOut}
+            >
+              <Text style={styles.signOutBtnText}>Sign Out of Mobile App</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

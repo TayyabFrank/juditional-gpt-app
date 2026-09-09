@@ -15,16 +15,15 @@ import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 
 export default function AppNavigator() {
   const { currentUser } = useAuth();
-  // If not logged in, always start at Login screen so every user uses their personal ID
-  const [currentStack, setCurrentStack] = useState(() => (currentUser ? 'Main' : 'Login'));
+  // Allow all users to view and browse the app freely; queries are gated behind login/signup
+  const [currentStack, setCurrentStack] = useState('Main');
   const [activeTab, setActiveTab] = useState('Home'); // 'Home' | 'Tools' | 'Assistant' | 'Features' | 'Profile'
   const [assistantParams, setAssistantParams] = useState(null);
+  const [authParams, setAuthParams] = useState(null);
 
-  // Sync stack when user logs in or logs out
+  // When user successfully logs in or signs up, return to Main tabs
   useEffect(() => {
-    if (!currentUser && currentStack === 'Main') {
-      setCurrentStack('Login');
-    } else if (currentUser && (currentStack === 'Login' || currentStack === 'Signup')) {
+    if (currentUser && (currentStack === 'Login' || currentStack === 'Signup')) {
       setCurrentStack('Main');
     }
   }, [currentUser]);
@@ -49,8 +48,10 @@ export default function AppNavigator() {
         setActiveTab('Profile');
         setCurrentStack('Main');
       } else if (screen === 'Login') {
+        if (params) setAuthParams(params);
         setCurrentStack('Login');
       } else if (screen === 'Signup') {
+        if (params) setAuthParams(params);
         setCurrentStack('Signup');
       } else if (screen === 'ForgotPassword') {
         setCurrentStack('ForgotPassword');
@@ -59,20 +60,16 @@ export default function AppNavigator() {
       }
     },
     goBack: () => {
-      if (currentUser) {
-        setCurrentStack('Main');
-      } else {
-        setCurrentStack('Login');
-      }
+      setCurrentStack('Main');
     }
   };
 
   // Render Stack screens if not in Main Tabs
   if (currentStack === 'Login') {
-    return <LoginScreen navigation={navigation} />;
+    return <LoginScreen navigation={navigation} route={{ params: authParams }} />;
   }
   if (currentStack === 'Signup') {
-    return <SignupScreen navigation={navigation} />;
+    return <SignupScreen navigation={navigation} route={{ params: authParams }} />;
   }
   if (currentStack === 'ForgotPassword') {
     return <ForgotPasswordScreen navigation={navigation} />;

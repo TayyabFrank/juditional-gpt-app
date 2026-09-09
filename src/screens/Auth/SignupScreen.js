@@ -15,13 +15,15 @@ import { colors } from '../../theme/colors';
 import Header from '../../components/Header';
 import { useAuth } from '../../context/AuthContext';
 
-export default function SignupScreen({ navigation }) {
+export default function SignupScreen({ navigation, route }) {
   const { signup, isLoadingAuth, currentUser } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [barNumber, setBarNumber] = useState('');
   const [selectedRole, setSelectedRole] = useState('Advocate High Court');
+
+  const pendingPrompt = route?.params?.pendingPrompt;
 
   const ROLES = [
     'Advocate High Court',
@@ -35,14 +37,18 @@ export default function SignupScreen({ navigation }) {
       return;
     }
     await signup(name, email, password, selectedRole);
-    navigation.navigate('MainTabs');
+    if (pendingPrompt) {
+      navigation.navigate('AssistantTab', { initialPrompt: pendingPrompt });
+    } else {
+      navigation.navigate('MainTabs');
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
         subtitle="Pakistan Law AI Portal"
-        onBack={currentUser ? () => navigation.goBack() : () => navigation.navigate('Login')}
+        onBack={() => navigation.goBack()}
       />
 
       <KeyboardAvoidingView
@@ -54,6 +60,15 @@ export default function SignupScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
+            {pendingPrompt && (
+              <View style={styles.pendingPromptBanner}>
+                <Text style={styles.pendingPromptLabel}>🔒 REGISTRATION REQUIRED TO CONSULT CHATBOT</Text>
+                <Text style={styles.pendingPromptText} numberOfLines={2}>
+                  "{pendingPrompt}"
+                </Text>
+              </View>
+            )}
+
             <View style={styles.badgeRow}>
               <Text style={styles.badgeText}>ENROLLMENT REGISTRATION</Text>
             </View>
@@ -275,5 +290,26 @@ const styles = StyleSheet.create({
     color: colors.primaryLight,
     fontSize: 12,
     fontWeight: '700',
+  },
+  pendingPromptBanner: {
+    backgroundColor: 'rgba(217, 119, 6, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.4)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  pendingPromptLabel: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  pendingPromptText: {
+    color: colors.textLight,
+    fontSize: 12,
+    fontStyle: 'italic',
+    lineHeight: 16,
   }
 });

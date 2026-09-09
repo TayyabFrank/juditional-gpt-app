@@ -40,6 +40,8 @@ export default function AssistantScreen({ route, navigation }) {
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState('');
 
   // Keep fresh refs for keyboard events
   const inputTextRef = useRef(inputText);
@@ -147,7 +149,12 @@ export default function AssistantScreen({ route, navigation }) {
   };
 
   const handleStartNewChat = async () => {
-    const userId = currentUser?.uid || 'adv-tayyab-786';
+    if (!currentUser) {
+      setPendingPrompt('Start New Legal Inquiry');
+      setIsAuthModalOpen(true);
+      return;
+    }
+    const userId = currentUser.uid;
     const newSession = await createChatSession(userId, 'New Legal Inquiry');
     const updated = await getUserChatSessions(userId);
     setSessions(updated);
@@ -157,7 +164,7 @@ export default function AssistantScreen({ route, navigation }) {
   };
 
   const handleDeleteSession = async (sessionId) => {
-    const userId = currentUser?.uid || 'adv-tayyab-786';
+    const userId = currentUser?.uid || 'guest';
     await deleteChatSession(userId, sessionId);
     const updated = await getUserChatSessions(userId);
     setSessions(updated);
@@ -177,11 +184,18 @@ export default function AssistantScreen({ route, navigation }) {
     const prompt = (textToSend || inputTextRef.current || inputText).trim();
     if (!prompt) return;
 
+    // Gate query submission: require login or signup first!
+    if (!currentUser) {
+      setPendingPrompt(prompt);
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     // Immediately clear input text and ref
     setInputText('');
     inputTextRef.current = '';
 
-    const userId = currentUser?.uid || 'adv-tayyab-786';
+    const userId = currentUser.uid;
     let currentSessionId = activeSessionId;
 
     if (!currentSessionId) {
@@ -244,7 +258,21 @@ export default function AssistantScreen({ route, navigation }) {
     handleSend(`Please analyze this ${doc.title} and outline legal grounds under Pakistani law: ${doc.desc}`);
   };
 
+  const handleAttachDoc = () => {
+    if (!currentUser) {
+      setPendingPrompt('Analyze Legal Document');
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setIsDocModalOpen(true);
+  };
+
   const handleVoiceCall = () => {
+    if (!currentUser) {
+      setPendingPrompt('Voice Legal Consultation');
+      setIsAuthModalOpen(true);
+      return;
+    }
     Alert.alert(
       'Voice Consultation Mode',
       'Speak your legal inquiry in English, Urdu, or regional languages. JudicialGPT voice audio channel is active.'
@@ -356,6 +384,35 @@ export default function AssistantScreen({ route, navigation }) {
             <Text style={styles.welcomeSub}>
               How may JudicialGPT assist your legal research and court drafting today?
             </Text>
+
+            {!currentUser && (
+              <View style={styles.authPromptCard}>
+                <View style={styles.authPromptHeader}>
+                  <Text style={styles.authPromptBadge}>⚖️ GUEST PREVIEW MODE</Text>
+                  <Text style={styles.authPromptStatus}>Sign In Required</Text>
+                </View>
+                <Text style={styles.authPromptTitle}>Consulting AI Requires Advocate Login</Text>
+                <Text style={styles.authPromptDesc}>
+                  You can browse all procedural guides and tools freely. When you ask a query, sign in or sign up so your chat history is saved to your personal account.
+                </Text>
+                <View style={styles.authPromptActions}>
+                  <TouchableOpacity
+                    style={styles.authPromptLoginBtn}
+                    onPress={() => navigation.navigate('Login')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.authPromptLoginText}>Sign In to Account</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.authPromptSignupBtn}
+                    onPress={() => navigation.navigate('Signup')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.authPromptSignupText}>Enroll / Sign Up</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Last Chat History Card */}
             {sessions.length > 0 && sessions[0].messages && sessions[0].messages.length > 0 && (
@@ -479,7 +536,7 @@ export default function AssistantScreen({ route, navigation }) {
         <View style={styles.inputBar}>
           <TouchableOpacity
             style={styles.attachBtn}
-            onPress={() => setIsDocModalOpen(true)}
+            onPress={handleAttachDoc}
             activeOpacity={0.7}
           >
             <Text style={styles.attachBtnIcon}>📎</Text>
@@ -488,7 +545,11 @@ export default function AssistantScreen({ route, navigation }) {
           <TextInput
             ref={inputElementRef}
             style={styles.textInput}
-            placeholder="Ask Pakistani legal question, cite section or FIR..."
+            placeholder={
+              currentUser
+                ? "Ask Pakistani legal question, cite section or FIR..."
+                : "Ask legal question (Sign in required to consult)..."
+            }
             placeholderTextColor={colors.textMuted}
             value={inputText}
             onChangeText={handleInputChange}
@@ -599,6 +660,70 @@ export default function AssistantScreen({ route, navigation }) {
         onClose={() => setIsDocModalOpen(false)}
         onSelectDocument={handleSelectDoc}
       />
+
+      {/* Auth Required Modal when user attempts to query without login */}
+      <Modal
+        visible={isAuthModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsAuthModalOpen(false)}
+      >
+        <View style={styles.authModalBackdrop}>
+          <View style={styles.authModalCard}>
+            <View style={styles.authModalHeader}>
+              <View style={styles.authModalIconCircle}>
+                <Text style={styles.authModalIcon}>🔒</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsAuthModalOpen(false)}>
+                <Text style={styles.authModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.authModalTitle}>Advocate Sign In Required</Text>
+            <Text style={styles.authModalSubtitle}>
+              To ask legal questions, consult JudicialGPT AI, and store your research history, please sign in or create an advocate account.
+            </Text>
+
+            {pendingPrompt ? (
+              <View style={styles.authModalPendingBox}>
+                <Text style={styles.authModalPendingLabel}>YOUR PENDING QUESTION:</Text>
+                <Text style={styles.authModalPendingText} numberOfLines={3}>
+                  "{pendingPrompt}"
+                </Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={styles.authModalLoginBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                setIsAuthModalOpen(false);
+                navigation.navigate('Login', { pendingPrompt });
+              }}
+            >
+              <Text style={styles.authModalLoginBtnText}>Sign In to My Account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.authModalSignupBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                setIsAuthModalOpen(false);
+                navigation.navigate('Signup', { pendingPrompt });
+              }}
+            >
+              <Text style={styles.authModalSignupBtnText}>Create New Advocate Account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.authModalDismissBtn}
+              onPress={() => setIsAuthModalOpen(false)}
+            >
+              <Text style={styles.authModalDismissText}>Cancel / Keep Browsing</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1147,5 +1272,179 @@ const styles = StyleSheet.create({
     color: colors.primaryLight,
     fontSize: 12,
     fontWeight: '700',
+  },
+  authModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.78)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  authModalCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: 22,
+    width: '100%',
+    maxWidth: 420,
+  },
+  authModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  authModalIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(217, 119, 6, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authModalIcon: {
+    fontSize: 20,
+  },
+  authModalCloseText: {
+    color: colors.textMuted,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  authModalTitle: {
+    color: colors.textLight,
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  authModalSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  authModalPendingBox: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    marginBottom: 16,
+  },
+  authModalPendingLabel: {
+    color: colors.gold,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  authModalPendingText: {
+    color: colors.textLight,
+    fontSize: 12,
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
+  authModalLoginBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  authModalLoginBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  authModalSignupBtn: {
+    backgroundColor: colors.cardBgElevated,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  authModalSignupBtnText: {
+    color: colors.textLight,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  authModalDismissBtn: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  authModalDismissText: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  authPromptCard: {
+    backgroundColor: 'rgba(217, 119, 6, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.3)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    width: '100%',
+  },
+  authPromptHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  authPromptBadge: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  authPromptStatus: {
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  authPromptTitle: {
+    color: colors.textLight,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  authPromptDesc: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 10,
+  },
+  authPromptActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  authPromptLoginBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  authPromptLoginText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  authPromptSignupBtn: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  authPromptSignupText: {
+    color: colors.textLight,
+    fontSize: 12,
+    fontWeight: '600',
   }
 });
