@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JudicialGPT Expo Go QR Code (SDK 57)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #0b0f19;
+      color: #f3f4f6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 32px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      max-width: 480px;
+      width: 100%;
+    }
+    h1 {
+      color: #10b981;
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    p {
+      color: #9ca3af;
+      font-size: 14px;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .qr-box {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      display: inline-block;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    }
+    .qr-box img {
+      width: 240px;
+      height: 240px;
+      display: block;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .url-box {
+      background: #1f2937;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-family: monospace;
+      color: #60a5fa;
+      font-size: 14px;
+      word-break: break-all;
+      margin-bottom: 12px;
+    }
+    .instructions {
+      text-align: left;
+      font-size: 13px;
+      color: #d1d5db;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-top: 16px;
+    }
+    .instructions ol {
+      margin: 8px 0 0 0;
+      padding-left: 20px;
+    }
+    .instructions li {
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">Expo SDK 57 Ready</div>
+    <h1>JudicialGPT Mobile</h1>
+    <p>Scan this QR code with the Expo Go app on your phone (or your camera app on iOS).</p>
+    
+    <div class="qr-box">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=exp://10.10.36.82:8081" alt="Expo Go QR Code">
+    </div>
+
+    <div class="url-box">exp://10.10.36.82:8081</div>
+    <div class="url-box" style="color: #a78bfa;">exp://192.168.137.1:8081</div>
+
+    <div class="instructions">
+      <strong>How to connect:</strong>
+      <ol>
+        <li>Make sure your phone is connected to the same Wi-Fi network.</li>
+        <li>Open <strong>Expo Go</strong> on your phone.</li>
+        <li>If you had an old error screen, tap <strong>Back to Home</strong> or force-close and reopen Expo Go.</li>
+        <li>Tap <strong>Scan QR code</strong> and point at the QR code above, or tap <strong>Enter URL manually</strong> and enter <code>exp://10.10.36.82:8081</code>.</li>
+      </ol>
+    </div>
+  </div>
+</body>
+</html>
