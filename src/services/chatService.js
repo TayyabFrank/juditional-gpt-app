@@ -59,9 +59,9 @@ function getStoredSessions(userId) {
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       const raw = window.localStorage.getItem(key);
-      if (raw) {
+      if (raw !== null && raw !== undefined) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -70,7 +70,7 @@ function getStoredSessions(userId) {
     }
   }
 
-  if (memoryStore[key] && Array.isArray(memoryStore[key]) && memoryStore[key].length > 0) {
+  if (memoryStore[key] && Array.isArray(memoryStore[key])) {
     return memoryStore[key];
   }
 
@@ -99,9 +99,10 @@ export async function getUserChatSessions(userId) {
 export async function createChatSession(userId, title) {
   const sessions = getStoredSessions(userId);
   const newSession = {
-    id: 'session-' + Date.now(),
+    id: 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
     title: title || 'New Legal Inquiry',
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     messages: []
   };
   const updated = [newSession, ...sessions];
@@ -132,17 +133,35 @@ export async function addMessageToChat(userId, sessionId, message) {
 
   const sessionIndex = sessions.findIndex(s => s.id === sessionId);
   if (sessionIndex >= 0) {
-    sessions[sessionIndex].messages.push(formattedMsg);
-    // Update title if it was the first user message
-    if (sessions[sessionIndex].title === 'New Legal Inquiry' && message.sender === 'user') {
-      sessions[sessionIndex].title = message.text.length > 30 ? message.text.substring(0, 30) + '...' : message.text;
+    // Remove from current index to unshift to top (most recent conversation)
+    const [targetSession] = sessions.splice(sessionIndex, 1);
+    targetSession.messages.push(formattedMsg);
+    targetSession.updatedAt = new Date().toISOString();
+
+    // Auto-generate title from first user query
+    if (
+      (!targetSession.title ||
+        targetSession.title === 'New Legal Inquiry' ||
+        targetSession.title === 'New Case Inquiry') &&
+      message.sender === 'user'
+    ) {
+      targetSession.title =
+        message.text.length > 35 ? message.text.substring(0, 35) + '...' : message.text;
     }
+
+    sessions.unshift(targetSession);
   } else {
-    // Session didn't exist, create it with this message
+    // Session didn't exist yet, create it as the top session
     const newSession = {
       id: sessionId || 'session-' + Date.now(),
-      title: message.text.length > 30 ? message.text.substring(0, 30) + '...' : message.text,
+      title:
+        message.text && message.sender === 'user'
+          ? message.text.length > 35
+            ? message.text.substring(0, 35) + '...'
+            : message.text
+          : 'New Legal Inquiry',
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       messages: [formattedMsg]
     };
     sessions.unshift(newSession);
