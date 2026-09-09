@@ -64,11 +64,10 @@ export default function AssistantScreen({ route, navigation }) {
   const loadSessions = async () => {
     const userSessions = await getUserChatSessions(currentUser?.uid);
     setSessions(userSessions);
-    if (userSessions.length > 0 && !activeSessionId) {
-      setActiveSessionId(userSessions[0].id);
-      loadMessages(userSessions[0].id);
-    } else if (activeSessionId) {
-      loadMessages(activeSessionId);
+    if (userSessions.length > 0) {
+      const targetSession = (activeSessionId && userSessions.find((s) => s.id === activeSessionId)) || userSessions[0];
+      setActiveSessionId(targetSession.id);
+      loadMessages(targetSession.id);
     }
   };
 
@@ -104,6 +103,8 @@ export default function AssistantScreen({ route, navigation }) {
       }
     }
   };
+
+  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
 
   const handleSend = async (textToSend) => {
     const prompt = (textToSend || inputText).trim();
@@ -184,7 +185,7 @@ export default function AssistantScreen({ route, navigation }) {
               onPress={() => setIsSessionModalOpen(true)}
               activeOpacity={0.7}
             >
-              <Text style={styles.historyBtnText}>📁 Cases</Text>
+              <Text style={styles.historyBtnText}>📁 All Cases ({sessions.length})</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -197,6 +198,64 @@ export default function AssistantScreen({ route, navigation }) {
           </View>
         }
       />
+
+      {/* Horizontal Chat History Bar */}
+      <View style={styles.historyStripContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.historyStripContent}
+        >
+          <TouchableOpacity
+            style={styles.historyNewPill}
+            onPress={handleStartNewChat}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.historyNewPillIcon}>+</Text>
+            <Text style={styles.historyNewPillText}>New Chat</Text>
+          </TouchableOpacity>
+
+          {sessions.map((s) => {
+            const isActive = s.id === activeSessionId;
+            return (
+              <TouchableOpacity
+                key={s.id}
+                style={[styles.historySessionPill, isActive && styles.historySessionPillActive]}
+                onPress={() => handleSelectSession(s.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.historySessionIcon}>💬</Text>
+                <Text
+                  style={[styles.historySessionText, isActive && styles.historySessionTextActive]}
+                  numberOfLines={1}
+                >
+                  {s.title}
+                </Text>
+                {isActive && <View style={styles.historyActiveDot} />}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Active Case Banner */}
+      {activeSession && (
+        <View style={styles.activeCaseBanner}>
+          <View style={styles.activeCaseLeft}>
+            <Text style={styles.activeCaseDot}>●</Text>
+            <Text style={styles.activeCaseLabel}>ACTIVE:</Text>
+            <Text style={styles.activeCaseTitle} numberOfLines={1}>
+              {activeSession.title}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.activeCaseSwitchBtn}
+            onPress={() => setIsSessionModalOpen(true)}
+          >
+            <Text style={styles.activeCaseSwitchText}>Switch ▾</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
@@ -220,6 +279,36 @@ export default function AssistantScreen({ route, navigation }) {
             <Text style={styles.welcomeSub}>
               How may JudicialGPT assist your legal research and court drafting today?
             </Text>
+
+            {/* Last Chat History Card */}
+            {sessions.length > 0 && sessions[0].messages && sessions[0].messages.length > 0 && (
+              <View style={styles.recentHistoryCard}>
+                <View style={styles.recentHistoryHeader}>
+                  <Text style={styles.recentHistoryBadge}>LAST CONVERSATION</Text>
+                  <Text style={styles.recentHistoryDate}>
+                    {new Date(sessions[0].createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+
+                <Text style={styles.recentHistoryTitle}>
+                  {sessions[0].title}
+                </Text>
+
+                <Text style={styles.recentHistorySnippet} numberOfLines={2}>
+                  "{sessions[0].messages[sessions[0].messages.length - 1].text}"
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.resumeChatBtn}
+                  activeOpacity={0.8}
+                  onPress={() => handleSelectSession(sessions[0].id)}
+                >
+                  <Text style={styles.resumeChatBtnText}>
+                    Resume Last Discussion ({sessions[0].messages.length} msgs) →
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.quickPromptSection}>
               <Text style={styles.quickPromptHeading}>FREQUENT PROCEDURAL INQUIRIES</Text>
@@ -325,7 +414,22 @@ export default function AssistantScreen({ route, navigation }) {
             placeholderTextColor={colors.textMuted}
             value={inputText}
             onChangeText={setInputText}
-            multiline
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={() => {
+              if (inputText.trim() && !isAiThinking) {
+                handleSend();
+              }
+            }}
+            onKeyPress={(e) => {
+              if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                e.preventDefault?.();
+                if (inputText.trim() && !isAiThinking) {
+                  handleSend();
+                }
+              }
+            }}
+            multiline={Platform.OS !== 'web'}
             maxLength={1000}
           />
 
@@ -801,5 +905,167 @@ const styles = StyleSheet.create({
   },
   sessionDeleteText: {
     fontSize: 14,
+  },
+  historyStripContainer: {
+    backgroundColor: colors.cardBg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 8,
+  },
+  historyStripContent: {
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 8,
+  },
+  historyNewPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 4,
+  },
+  historyNewPillIcon: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  historyNewPillText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  historySessionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    maxWidth: 200,
+    gap: 6,
+  },
+  historySessionPillActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: colors.primary,
+  },
+  historySessionIcon: {
+    fontSize: 11,
+  },
+  historySessionText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  historySessionTextActive: {
+    color: colors.primaryLight,
+    fontWeight: '700',
+  },
+  historyActiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  activeCaseBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.cardBgElevated,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  activeCaseLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+    gap: 6,
+  },
+  activeCaseDot: {
+    color: colors.success,
+    fontSize: 10,
+  },
+  activeCaseLabel: {
+    color: colors.gold,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  activeCaseTitle: {
+    color: colors.textLight,
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  activeCaseSwitchBtn: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  activeCaseSwitchText: {
+    color: colors.primaryLight,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  recentHistoryCard: {
+    width: '100%',
+    backgroundColor: colors.cardBg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: 16,
+    marginBottom: 20,
+  },
+  recentHistoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  recentHistoryBadge: {
+    color: colors.gold,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  recentHistoryDate: {
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  recentHistoryTitle: {
+    color: colors.textLight,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  recentHistorySnippet: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  resumeChatBtn: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.primaryDark,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  resumeChatBtnText: {
+    color: colors.primaryLight,
+    fontSize: 12,
+    fontWeight: '700',
   }
 });
