@@ -6,7 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import { colors } from '../../theme/colors';
 import Header from '../../components/Header';
@@ -35,6 +36,18 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleClearHistory = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' && window.confirm
+        ? window.confirm('Are you sure you want to permanently clear previous chat history for this account?')
+        : true;
+      if (confirmed) {
+        const userId = currentUser?.uid || 'adv-tayyab-786';
+        clearUserChatHistory(userId);
+        setUserSessions([]);
+      }
+      return;
+    }
+
     Alert.alert(
       'Clear Saved History',
       'Are you sure you want to permanently clear previous chat history for this account?',
@@ -54,12 +67,30 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleSignOut = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' && window.confirm
+        ? window.confirm('Are you sure you want to sign out of JudicialGPT?')
+        : true;
+      if (confirmed) {
+        logout();
+        navigation.navigate('Login');
+      }
+      return;
+    }
+
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out of JudicialGPT?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', style: 'destructive', onPress: () => logout() }
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: () => {
+            logout();
+            navigation.navigate('Login');
+          }
+        }
       ]
     );
   };

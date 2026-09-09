@@ -22,6 +22,7 @@ export default function SignupScreen({ navigation, route }) {
   const [password, setPassword] = useState('');
   const [barNumber, setBarNumber] = useState('');
   const [selectedRole, setSelectedRole] = useState('Advocate High Court');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const pendingPrompt = route?.params?.pendingPrompt;
 
@@ -33,14 +34,28 @@ export default function SignupScreen({ navigation, route }) {
   ];
 
   const handleSignup = async () => {
-    if (!name.trim() || !email.trim() || !password.trim()) {
+    setErrorMessage('');
+    if (!name.trim()) {
+      setErrorMessage('Please enter your full name (with honorific).');
       return;
     }
-    await signup(name, email, password, selectedRole);
-    if (pendingPrompt) {
-      navigation.navigate('AssistantTab', { initialPrompt: pendingPrompt });
-    } else {
-      navigation.navigate('MainTabs');
+    if (!email.trim()) {
+      setErrorMessage('Please enter your official or personal email address.');
+      return;
+    }
+    if (!password.trim()) {
+      setErrorMessage('Please create a secure password.');
+      return;
+    }
+    try {
+      await signup(name, email, password, selectedRole);
+      if (pendingPrompt) {
+        navigation.navigate('AssistantTab', { initialPrompt: pendingPrompt });
+      } else {
+        navigation.navigate('MainTabs');
+      }
+    } catch (err) {
+      setErrorMessage('Enrollment registration failed. Please try again.');
     }
   };
 
@@ -60,6 +75,12 @@ export default function SignupScreen({ navigation, route }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
+            {errorMessage ? (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>⚠️ {errorMessage}</Text>
+              </View>
+            ) : null}
+
             {pendingPrompt && (
               <View style={styles.pendingPromptBanner}>
                 <Text style={styles.pendingPromptLabel}>🔒 REGISTRATION REQUIRED TO CONSULT CHATBOT</Text>
@@ -311,5 +332,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     lineHeight: 16,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 14,
+  },
+  errorBannerText: {
+    color: colors.error,
+    fontSize: 12,
+    fontWeight: '600',
   }
 });

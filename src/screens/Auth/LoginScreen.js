@@ -19,14 +19,35 @@ export default function LoginScreen({ navigation, route }) {
   const { login, loginAsDemo, loginAsGuest, isLoadingAuth, currentUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const pendingPrompt = route?.params?.pendingPrompt;
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
+    setErrorMessage('');
+    if (!email.trim()) {
+      setErrorMessage('Please enter your bar or personal email address.');
       return;
     }
-    await login(email, password);
+    if (!password.trim()) {
+      setErrorMessage('Please enter your account password.');
+      return;
+    }
+    try {
+      await login(email, password);
+      if (pendingPrompt) {
+        navigation.navigate('AssistantTab', { initialPrompt: pendingPrompt });
+      } else {
+        navigation.navigate('MainTabs');
+      }
+    } catch (err) {
+      setErrorMessage('Sign in failed. Please verify credentials.');
+    }
+  };
+
+  const handleDemoAdvocate = async () => {
+    setErrorMessage('');
+    await loginAsDemo('Advocate High Court');
     if (pendingPrompt) {
       navigation.navigate('AssistantTab', { initialPrompt: pendingPrompt });
     } else {
@@ -34,17 +55,9 @@ export default function LoginScreen({ navigation, route }) {
     }
   };
 
-  const handleDemoAdvocate = () => {
-    loginAsDemo('Advocate High Court');
-    if (pendingPrompt) {
-      navigation.navigate('AssistantTab', { initialPrompt: pendingPrompt });
-    } else {
-      navigation.navigate('MainTabs');
-    }
-  };
-
-  const handleGuest = () => {
-    loginAsGuest();
+  const handleGuest = async () => {
+    setErrorMessage('');
+    await loginAsGuest();
     if (pendingPrompt) {
       navigation.navigate('AssistantTab', { initialPrompt: pendingPrompt });
     } else {
@@ -68,6 +81,12 @@ export default function LoginScreen({ navigation, route }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
+            {errorMessage ? (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>⚠️ {errorMessage}</Text>
+              </View>
+            ) : null}
+
             {pendingPrompt && (
               <View style={styles.pendingPromptBanner}>
                 <Text style={styles.pendingPromptLabel}>🔒 LOGIN REQUIRED FOR LEGAL INQUIRY</Text>
@@ -333,5 +352,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     lineHeight: 16,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 14,
+  },
+  errorBannerText: {
+    color: colors.error,
+    fontSize: 12,
+    fontWeight: '600',
   }
 });
