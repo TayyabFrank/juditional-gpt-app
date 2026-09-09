@@ -54,6 +54,18 @@ export default function AssistantScreen({ route, navigation }) {
     isAiThinkingRef.current = isAiThinking;
   }, [isAiThinking]);
 
+  // Intercept any newline insertion (pressing Enter) and send immediately
+  const handleInputChange = (text) => {
+    if (text.includes('\n') || text.includes('\r')) {
+      const cleanPrompt = text.replace(/[\r\n]/g, '').trim();
+      if (cleanPrompt && !isAiThinkingRef.current && handleSendRef.current) {
+        handleSendRef.current(cleanPrompt);
+      }
+      return;
+    }
+    setInputText(text);
+  };
+
   // Robust Enter key listener for Web to send message immediately without clicking mouse
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -452,32 +464,26 @@ export default function AssistantScreen({ route, navigation }) {
             placeholder="Ask Pakistani legal question, cite section or FIR..."
             placeholderTextColor={colors.textMuted}
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             returnKeyType="send"
             blurOnSubmit={false}
+            multiline={false}
             onSubmitEditing={() => {
-              if (inputText.trim() && !isAiThinking) {
-                handleSend(inputText);
+              const text = (inputText || '').trim();
+              if (text && !isAiThinking) {
+                handleSend(text);
               }
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (inputText.trim() && !isAiThinking) {
-                  handleSend(inputText);
+                e.stopPropagation();
+                const text = (inputTextRef.current || '').trim();
+                if (text && !isAiThinkingRef.current && handleSendRef.current) {
+                  handleSendRef.current(text);
                 }
               }
             }}
-            onKeyPress={(e) => {
-              const key = e.nativeEvent?.key || e.key;
-              if (key === 'Enter' && !e.shiftKey && !e.nativeEvent?.shiftKey) {
-                e.preventDefault?.();
-                if (inputText.trim() && !isAiThinking) {
-                  handleSend(inputText);
-                }
-              }
-            }}
-            multiline={Platform.OS !== 'web'}
             maxLength={1000}
           />
 
@@ -822,11 +828,10 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    minHeight: 38,
-    maxHeight: 100,
+    height: 40,
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    paddingHorizontal: 14,
+    borderRadius: 20,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     color: colors.text,
     fontSize: 13,
