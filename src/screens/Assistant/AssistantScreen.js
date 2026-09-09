@@ -41,6 +41,43 @@ export default function AssistantScreen({ route, navigation }) {
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
+  // Keep fresh refs for keyboard events
+  const inputTextRef = useRef(inputText);
+  const isAiThinkingRef = useRef(isAiThinking);
+  const handleSendRef = useRef(null);
+
+  useEffect(() => {
+    inputTextRef.current = inputText;
+  }, [inputText]);
+
+  useEffect(() => {
+    isAiThinkingRef.current = isAiThinking;
+  }, [isAiThinking]);
+
+  // Robust Enter key listener for Web to send message immediately without clicking mouse
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleGlobalKeyDown = (e) => {
+        if ((e.key === 'Enter' || e.keyCode === 13) && !e.shiftKey) {
+          const active = document.activeElement;
+          if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const text = (inputTextRef.current || '').trim();
+            if (text && !isAiThinkingRef.current && handleSendRef.current) {
+              handleSendRef.current(text);
+            }
+          }
+        }
+      };
+
+      window.addEventListener('keydown', handleGlobalKeyDown, true);
+      return () => {
+        window.removeEventListener('keydown', handleGlobalKeyDown, true);
+      };
+    }
+  }, []);
+
   // Quick prompt chips
   const QUICK_PROMPTS = [
     { label: 'Bail Petition s.497', query: 'Draft grounds for post-arrest bail petition under Section 497 Cr.P.C. in a case of alleged cheque dishonour.' },
@@ -162,6 +199,8 @@ export default function AssistantScreen({ route, navigation }) {
       }, 100);
     }
   };
+
+  handleSendRef.current = handleSend;
 
   const handleSelectDoc = (doc) => {
     handleSend(`Please analyze this ${doc.title} and outline legal grounds under Pakistani law: ${doc.desc}`);
@@ -418,14 +457,23 @@ export default function AssistantScreen({ route, navigation }) {
             blurOnSubmit={false}
             onSubmitEditing={() => {
               if (inputText.trim() && !isAiThinking) {
-                handleSend();
+                handleSend(inputText);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (inputText.trim() && !isAiThinking) {
+                  handleSend(inputText);
+                }
               }
             }}
             onKeyPress={(e) => {
-              if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+              const key = e.nativeEvent?.key || e.key;
+              if (key === 'Enter' && !e.shiftKey && !e.nativeEvent?.shiftKey) {
                 e.preventDefault?.();
                 if (inputText.trim() && !isAiThinking) {
-                  handleSend();
+                  handleSend(inputText);
                 }
               }
             }}
