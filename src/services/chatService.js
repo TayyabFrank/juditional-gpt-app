@@ -1,10 +1,9 @@
 /**
  * JudicialGPT Mobile - Chat Session & History Service
- * Manages user sessions, real-time message streams, and local state persistence
+ * Manages user sessions, real-time message streams, and per-account persistence
  */
 
-// In-memory persistent cache for mobile sessions
-let localSessions = [
+const DEFAULT_SESSIONS = [
   {
     id: 'session-demo-1',
     title: 'Bail Petition under S.497 CrPC',
@@ -47,51 +46,108 @@ let localSessions = [
   }
 ];
 
-export async function getUserChatSessions(_userId) {
-  return [...localSessions];
+// In-memory fallback per user account
+const memoryStore = {};
+
+function getStorageKey(userId) {
+  const safeId = (userId || 'adv-tayyab-786').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `judicialgpt_user_chats_${safeId}`;
 }
 
-export async function createChatSession(_userId, title) {
+function getStoredSessions(userId) {
+  const key = getStorageKey(userId);
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('[ChatService] Error reading localStorage:', e);
+    }
+  }
+
+  if (memoryStore[key] && Array.isArray(memoryStore[key]) && memoryStore[key].length > 0) {
+    return memoryStore[key];
+  }
+
+  // Initialize with default template sessions for the account
+  const initial = JSON.parse(JSON.stringify(DEFAULT_SESSIONS));
+  saveStoredSessions(userId, initial);
+  return initial;
+}
+
+function saveStoredSessions(userId, sessions) {
+  const key = getStorageKey(userId);
+  memoryStore[key] = sessions;
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(sessions));
+    } catch (e) {
+      console.warn('[ChatService] Error writing localStorage:', e);
+    }
+  }
+}
+
+export async function getUserChatSessions(userId) {
+  return getStoredSessions(userId);
+}
+
+export async function createChatSession(userId, title) {
+  const sessions = getStoredSessions(userId);
   const newSession = {
     id: 'session-' + Date.now(),
     title: title || 'New Legal Inquiry',
     createdAt: new Date().toISOString(),
     messages: []
   };
-  localSessions = [newSession, ...localSessions];
+  const updated = [newSession, ...sessions];
+  saveStoredSessions(userId, updated);
   return newSession;
 }
 
-export async function deleteChatSession(_userId, sessionId) {
-  localSessions = localSessions.filter(s => s.id !== sessionId);
+export async function deleteChatSession(userId, sessionId) {
+  const sessions = getStoredSessions(userId);
+  const updated = sessions.filter(s => s.id !== sessionId);
+  saveStoredSessions(userId, updated);
   return true;
 }
 
-export async function getChatMessages(_userId, sessionId) {
-  const session = localSessions.find(s => s.id === sessionId);
+export async function getChatMessages(userId, sessionId) {
+  const sessions = getStoredSessions(userId);
+  const session = sessions.find(s => s.id === sessionId);
   return session ? [...session.messages] : [];
 }
 
-export async function addMessageToChat(_userId, sessionId, message) {
-  const sessionIndex = localSessions.findIndex(s => s.id === sessionId);
+export async function addMessageToChat(userId, sessionId, message) {
+  const sessions = getStoredSessions(userId);
   const formattedMsg = {
     id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
     ...message,
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   };
 
+  const sessionIndex = sessions.findIndex(s => s.id === sessionId);
   if (sessionIndex >= 0) {
-    localSessions[sessionIndex].messages.push(formattedMsg);
+    sessions[sessionIndex].messages.push(formattedMsg);
+    // Update title if it was the first user message
+    if (sessions[sessionIndex].title === 'New Legal Inquiry' && message.sender === 'user') {
+      sessions[sessionIndex].title = message.text.length > 30 ? message.text.substring(0, 30) + '...' : message.text;
+    }
   } else {
-    // If session doesn't exist, create one
+    // Session didn't exist, create it with this message
     const newSession = {
       id: sessionId || 'session-' + Date.now(),
       title: message.text.length > 30 ? message.text.substring(0, 30) + '...' : message.text,
       createdAt: new Date().toISOString(),
       messages: [formattedMsg]
     };
-    localSessions = [newSession, ...localSessions];
+    sessions.unshift(newSession);
   }
 
+  saveStoredSessions(userId, sessions);
   return formattedMsg;
 }

@@ -64,6 +64,7 @@ export default function AssistantScreen({ route, navigation }) {
       return;
     }
     setInputText(text);
+    inputTextRef.current = text;
   };
 
   // Robust Enter key listener for Web to send message immediately without clicking mouse
@@ -98,10 +99,10 @@ export default function AssistantScreen({ route, navigation }) {
     { label: 'Writ under Art. 199', query: 'What are the essential grounds to maintain a writ petition against CDA/LDA under Article 199?' },
   ];
 
-  // Load chat sessions on mount
+  // Reload chat sessions on mount and whenever user account changes
   useEffect(() => {
     loadSessions();
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, currentUser?.email]);
 
   // Handle route params if opened with initialPrompt
   useEffect(() => {
@@ -111,17 +112,22 @@ export default function AssistantScreen({ route, navigation }) {
   }, [route?.params?.initialPrompt]);
 
   const loadSessions = async () => {
-    const userSessions = await getUserChatSessions(currentUser?.uid);
+    const userId = currentUser?.uid || 'adv-tayyab-786';
+    const userSessions = await getUserChatSessions(userId);
     setSessions(userSessions);
     if (userSessions.length > 0) {
       const targetSession = (activeSessionId && userSessions.find((s) => s.id === activeSessionId)) || userSessions[0];
       setActiveSessionId(targetSession.id);
       loadMessages(targetSession.id);
+    } else {
+      setActiveSessionId(null);
+      setMessages([]);
     }
   };
 
   const loadMessages = async (sessionId) => {
-    const msgs = await getChatMessages(currentUser?.uid, sessionId);
+    const userId = currentUser?.uid || 'adv-tayyab-786';
+    const msgs = await getChatMessages(userId, sessionId);
     setMessages(msgs);
   };
 
@@ -132,16 +138,19 @@ export default function AssistantScreen({ route, navigation }) {
   };
 
   const handleStartNewChat = async () => {
-    const newSession = await createChatSession(currentUser?.uid, 'New Legal Inquiry');
-    setSessions([newSession, ...sessions]);
+    const userId = currentUser?.uid || 'adv-tayyab-786';
+    const newSession = await createChatSession(userId, 'New Legal Inquiry');
+    const updated = await getUserChatSessions(userId);
+    setSessions(updated);
     setActiveSessionId(newSession.id);
     setMessages([]);
     setIsSessionModalOpen(false);
   };
 
   const handleDeleteSession = async (sessionId) => {
-    await deleteChatSession(currentUser?.uid, sessionId);
-    const updated = sessions.filter((s) => s.id !== sessionId);
+    const userId = currentUser?.uid || 'adv-tayyab-786';
+    await deleteChatSession(userId, sessionId);
+    const updated = await getUserChatSessions(userId);
     setSessions(updated);
     if (activeSessionId === sessionId) {
       if (updated.length > 0) {
@@ -156,20 +165,22 @@ export default function AssistantScreen({ route, navigation }) {
   const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
 
   const handleSend = async (textToSend) => {
-    const prompt = (textToSend || inputText).trim();
+    const prompt = (textToSend || inputTextRef.current || inputText).trim();
     if (!prompt) return;
 
+    // Immediately clear input text and ref
     setInputText('');
-    let currentSession = activeSessionId;
+    inputTextRef.current = '';
 
-    if (!currentSession) {
-      const newSession = await createChatSession(
-        currentUser?.uid,
-        prompt.length > 25 ? prompt.substring(0, 25) + '...' : prompt
-      );
-      currentSession = newSession.id;
+    const userId = currentUser?.uid || 'adv-tayyab-786';
+    let currentSessionId = activeSessionId;
+
+    if (!currentSessionId) {
+      const titleSnippet = prompt.length > 28 ? prompt.substring(0, 28) + '...' : prompt;
+      const newSession = await createChatSession(userId, titleSnippet);
+      currentSessionId = newSession.id;
       setActiveSessionId(newSession.id);
-      setSessions([newSession, ...sessions]);
+      setSessions((prev) => [newSession, ...prev]);
     }
 
     const userMsg = {
@@ -177,14 +188,15 @@ export default function AssistantScreen({ route, navigation }) {
       text: prompt
     };
 
-    const savedUserMsg = await addMessageToChat(currentUser?.uid, currentSession, userMsg);
+    // 1. Immediately upload user message to message box and persistent store
+    const savedUserMsg = await addMessageToChat(userId, currentSessionId, userMsg);
     setMessages((prev) => [...prev, savedUserMsg]);
     setIsAiThinking(true);
 
-    // Scroll to bottom
+    // Scroll chat stream to bottom
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    }, 50);
 
     try {
       const aiResponse = await generateLegalResponse(prompt, messages);
@@ -194,21 +206,26 @@ export default function AssistantScreen({ route, navigation }) {
         citations: aiResponse.citations || []
       };
 
-      const savedAiMsg = await addMessageToChat(currentUser?.uid, currentSession, aiMsg);
+      // 2. Upload AI response to message box and store in account history
+      const savedAiMsg = await addMessageToChat(userId, currentSessionId, aiMsg);
       setMessages((prev) => [...prev, savedAiMsg]);
+
+      // 3. Update session list to reflect new title/count in history strip
+      const updatedSessions = await getUserChatSessions(userId);
+      setSessions(updatedSessions);
     } catch (err) {
       const fallbackAiMsg = {
         sender: 'ai',
         text: 'JudicialGPT experienced an issue reaching the remote database. Precedent synthesis will resume shortly.',
         citations: ['System Notice']
       };
-      const savedFallback = await addMessageToChat(currentUser?.uid, currentSession, fallbackAiMsg);
+      const savedFallback = await addMessageToChat(userId, currentSessionId, fallbackAiMsg);
       setMessages((prev) => [...prev, savedFallback]);
     } finally {
       setIsAiThinking(false);
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      }, 50);
     }
   };
 
