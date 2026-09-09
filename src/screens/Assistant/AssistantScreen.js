@@ -110,19 +110,22 @@ export default function AssistantScreen({ route, navigation }) {
     loadSessions();
   }, [currentUser?.uid, currentUser?.email]);
 
-  // Handle route params if opened with initialPrompt
+  // Handle route params (e.g. opened from Profile history or Quick action)
   useEffect(() => {
-    if (route?.params?.initialPrompt) {
+    if (route?.params?.sessionId) {
+      handleSelectSession(route.params.sessionId);
+    } else if (route?.params?.initialPrompt) {
       handleSend(route.params.initialPrompt);
     }
-  }, [route?.params?.initialPrompt]);
+  }, [route?.params?.sessionId, route?.params?.initialPrompt]);
 
-  const loadSessions = async () => {
+  const loadSessions = async (preferredSessionId = null) => {
     const userId = currentUser?.uid || 'adv-tayyab-786';
     const userSessions = await getUserChatSessions(userId);
     setSessions(userSessions);
+    const targetId = preferredSessionId || route?.params?.sessionId || activeSessionId;
     if (userSessions.length > 0) {
-      const targetSession = (activeSessionId && userSessions.find((s) => s.id === activeSessionId)) || userSessions[0];
+      const targetSession = (targetId && userSessions.find((s) => s.id === targetId)) || userSessions[0];
       setActiveSessionId(targetSession.id);
       loadMessages(targetSession.id);
     } else {

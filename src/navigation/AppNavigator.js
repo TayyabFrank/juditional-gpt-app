@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { colors } from '../theme/colors';
+import { useAuth } from '../context/AuthContext';
 
 // Screens
 import HomeScreen from '../screens/Home/HomeScreen';
@@ -13,28 +14,38 @@ import SignupScreen from '../screens/Auth/SignupScreen';
 import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 
 export default function AppNavigator() {
-  // Navigation stack state
-  const [currentStack, setCurrentStack] = useState('Main'); // 'Main' | 'Login' | 'Signup' | 'ForgotPassword'
+  const { currentUser } = useAuth();
+  // If not logged in, always start at Login screen so every user uses their personal ID
+  const [currentStack, setCurrentStack] = useState(() => (currentUser ? 'Main' : 'Login'));
   const [activeTab, setActiveTab] = useState('Home'); // 'Home' | 'Tools' | 'Assistant' | 'Features' | 'Profile'
   const [assistantParams, setAssistantParams] = useState(null);
+
+  // Sync stack when user logs in or logs out
+  useEffect(() => {
+    if (!currentUser && currentStack === 'Main') {
+      setCurrentStack('Login');
+    } else if (currentUser && (currentStack === 'Login' || currentStack === 'Signup')) {
+      setCurrentStack('Main');
+    }
+  }, [currentUser]);
 
   // Custom navigation controller
   const navigation = {
     navigate: (screen, params) => {
-      if (screen === 'AssistantTab') {
+      if (screen === 'AssistantTab' || screen === 'Assistant') {
         setActiveTab('Assistant');
         setCurrentStack('Main');
         if (params) setAssistantParams(params);
-      } else if (screen === 'HomeTab') {
+      } else if (screen === 'HomeTab' || screen === 'Home') {
         setActiveTab('Home');
         setCurrentStack('Main');
-      } else if (screen === 'ToolsTab') {
+      } else if (screen === 'ToolsTab' || screen === 'Tools') {
         setActiveTab('Tools');
         setCurrentStack('Main');
-      } else if (screen === 'FeaturesTab') {
+      } else if (screen === 'FeaturesTab' || screen === 'Features') {
         setActiveTab('Features');
         setCurrentStack('Main');
-      } else if (screen === 'ProfileTab') {
+      } else if (screen === 'ProfileTab' || screen === 'Profile') {
         setActiveTab('Profile');
         setCurrentStack('Main');
       } else if (screen === 'Login') {
@@ -48,7 +59,11 @@ export default function AppNavigator() {
       }
     },
     goBack: () => {
-      setCurrentStack('Main');
+      if (currentUser) {
+        setCurrentStack('Main');
+      } else {
+        setCurrentStack('Login');
+      }
     }
   };
 

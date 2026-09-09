@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,46 @@ import {
 import { colors } from '../../theme/colors';
 import Header from '../../components/Header';
 import { useAuth } from '../../context/AuthContext';
+import {
+  getUserChatSessions,
+  clearUserChatHistory
+} from '../../services/chatService';
 
 export default function ProfileScreen({ navigation }) {
   const { currentUser, logout, loginAsDemo, loginAsGuest } = useAuth();
+  const [userSessions, setUserSessions] = useState([]);
+
+  useEffect(() => {
+    loadUserSessions();
+  }, [currentUser?.uid, currentUser?.email]);
+
+  const loadUserSessions = async () => {
+    const userId = currentUser?.uid || 'adv-tayyab-786';
+    const sessions = await getUserChatSessions(userId);
+    setUserSessions(sessions);
+  };
 
   const handleRoleSwitch = (role) => {
     loginAsDemo(role);
+  };
+
+  const handleClearHistory = () => {
+    Alert.alert(
+      'Clear Saved History',
+      'Are you sure you want to permanently clear previous chat history for this account?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            const userId = currentUser?.uid || 'adv-tayyab-786';
+            await clearUserChatHistory(userId);
+            setUserSessions([]);
+          }
+        }
+      ]
+    );
   };
 
   const handleSignOut = () => {
@@ -32,7 +66,7 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Header subtitle="Advocate Credentials & Preferences" />
+      <Header subtitle="Advocate Credentials & Chat History" />
 
       <ScrollView
         style={styles.container}
@@ -62,9 +96,110 @@ export default function ProfileScreen({ navigation }) {
 
           {/* Bar Council License Strip */}
           <View style={styles.licenseStrip}>
-            <Text style={styles.licenseLabel}>BAR ENROLLMENT NO:</Text>
-            <Text style={styles.licenseValue}>{currentUser?.barCouncilNumber || 'LHC-ROLL-7890'}</Text>
+            <Text style={styles.licenseLabel}>ACCOUNT USER ID:</Text>
+            <Text style={styles.licenseValue}>{currentUser?.uid || 'adv-tayyab-786'}</Text>
           </View>
+        </View>
+
+        {/* Saved Chat History Section for This Account */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>SAVED CHAT HISTORY IN THIS ACCOUNT</Text>
+            <View style={styles.historyBadge}>
+              <Text style={styles.historyBadgeText}>{userSessions.length} Case Inquiries</Text>
+            </View>
+          </View>
+
+          <Text style={styles.accountHintText}>
+            All chats, precedents & legal responses are automatically stored in your account:
+            {' '}<Text style={styles.highlightText}>{currentUser?.email || 'Active Account'}</Text>
+          </Text>
+
+          {userSessions.length > 0 ? (
+            <View style={styles.historyCard}>
+              {userSessions.map((session, index) => {
+                const msgCount = session.messages ? session.messages.length : 0;
+                const lastMsg =
+                  session.messages && session.messages.length > 0
+                    ? session.messages[session.messages.length - 1].text
+                    : '';
+                const dateStr = session.createdAt
+                  ? new Date(session.createdAt).toLocaleDateString([], {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
+                    })
+                  : 'Recent';
+
+                return (
+                  <TouchableOpacity
+                    key={session.id || index}
+                    style={[
+                      styles.historyItemRow,
+                      index < userSessions.length - 1 && styles.historyItemBorder
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() => navigation.navigate('Assistant', { sessionId: session.id })}
+                  >
+                    <View style={styles.historyItemIconBox}>
+                      <Text style={styles.historyItemIcon}>⚖️</Text>
+                    </View>
+                    <View style={styles.historyItemContent}>
+                      <View style={styles.historyItemHeader}>
+                        <Text style={styles.historyItemTitle} numberOfLines={1}>
+                          {session.title || 'Legal Research Session'}
+                        </Text>
+                        <Text style={styles.historyItemDate}>{dateStr}</Text>
+                      </View>
+                      {lastMsg ? (
+                        <Text style={styles.historyItemSnippet} numberOfLines={2}>
+                          {lastMsg}
+                        </Text>
+                      ) : null}
+                      <View style={styles.historyItemMeta}>
+                        <View style={styles.countPill}>
+                          <Text style={styles.countPillText}>{msgCount} Messages</Text>
+                        </View>
+                        <Text style={styles.historyOpenAction}>Open in Chatbot →</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <View style={styles.historyActionsRow}>
+                <TouchableOpacity
+                  style={styles.openChatbotBtn}
+                  onPress={() => navigation.navigate('Assistant')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.openChatbotBtnText}>💬 Open Chatbot</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.clearHistoryBtn}
+                  onPress={handleClearHistory}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.clearHistoryBtnText}>🗑️ Clear History</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.emptyHistoryCard}>
+              <Text style={styles.emptyHistoryIcon}>📂</Text>
+              <Text style={styles.emptyHistoryTitle}>No Saved History Yet</Text>
+              <Text style={styles.emptyHistorySubtitle}>
+                Legal research and questions you ask in the Chatbot will be saved here under your account.
+              </Text>
+              <TouchableOpacity
+                style={styles.startInquiryBtn}
+                onPress={() => navigation.navigate('Assistant')}
+              >
+                <Text style={styles.startInquiryBtnText}>+ Start Legal Inquiry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Quick Role Switcher for Testing */}
@@ -104,7 +239,7 @@ export default function ProfileScreen({ navigation }) {
         {/* Knowledge & AI Engine Settings */}
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>AI ENGINE & DATABASE</Text>
-          
+
           <View style={styles.settingCard}>
             <View style={styles.settingRow}>
               <Text style={styles.settingLabel}>Active AI Model</Text>
@@ -117,8 +252,8 @@ export default function ProfileScreen({ navigation }) {
             </View>
 
             <View style={styles.settingRow}>
-              <Text style={styles.settingLabel}>Offline Fallback Engine</Text>
-              <Text style={[styles.settingValue, { color: colors.success }]}>Active (Zero Downtime)</Text>
+              <Text style={styles.settingLabel}>Account Persistence</Text>
+              <Text style={[styles.settingValue, { color: colors.success }]}>Active (Local + Cloud)</Text>
             </View>
 
             <View style={styles.settingRow}>
@@ -218,15 +353,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   verifiedText: {
-    color: colors.primaryLight,
+    color: colors.success,
     fontSize: 9,
     fontWeight: '800',
+    letterSpacing: 0.5,
   },
   userRole: {
     color: colors.gold,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -242,7 +380,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -259,12 +397,189 @@ const styles = StyleSheet.create({
   sectionBlock: {
     marginBottom: 20,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   sectionTitle: {
     color: colors.gold,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.8,
+  },
+  historyBadge: {
+    backgroundColor: colors.primaryMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  historyBadgeText: {
+    color: colors.primaryLight,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  accountHintText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+  highlightText: {
+    color: colors.primaryLight,
+    fontWeight: '700',
+  },
+  historyCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  historyItemRow: {
+    flexDirection: 'row',
+    padding: 14,
+    alignItems: 'flex-start',
+  },
+  historyItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  historyItemIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  historyItemIcon: {
+    fontSize: 16,
+  },
+  historyItemContent: {
+    flex: 1,
+  },
+  historyItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  historyItemTitle: {
+    color: colors.textLight,
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 8,
+  },
+  historyItemDate: {
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  historyItemSnippet: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: 8,
+  },
+  historyItemMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  countPill: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  countPillText: {
+    color: colors.textSecondary,
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  historyOpenAction: {
+    color: colors.primaryLight,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  historyActionsRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 10,
+    gap: 10,
+  },
+  openChatbotBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  openChatbotBtnText: {
+    color: colors.textLight,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  clearHistoryBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  clearHistoryBtnText: {
+    color: colors.error,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyHistoryCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyHistoryIcon: {
+    fontSize: 32,
     marginBottom: 10,
+  },
+  emptyHistoryTitle: {
+    color: colors.textLight,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptyHistorySubtitle: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 16,
+  },
+  startInquiryBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+  },
+  startInquiryBtnText: {
+    color: colors.textLight,
+    fontSize: 12,
+    fontWeight: '700',
   },
   roleGrid: {
     gap: 8,

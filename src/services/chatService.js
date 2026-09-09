@@ -50,7 +50,7 @@ const DEFAULT_SESSIONS = [
 const memoryStore = {};
 
 function getStorageKey(userId) {
-  const safeId = (userId || 'adv-tayyab-786').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeId = (userId || 'adv-tayyab-786').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
   return `judicialgpt_user_chats_${safeId}`;
 }
 
@@ -151,3 +151,17 @@ export async function addMessageToChat(userId, sessionId, message) {
   saveStoredSessions(userId, sessions);
   return formattedMsg;
 }
+
+export async function clearUserChatHistory(userId) {
+  const key = getStorageKey(userId);
+  memoryStore[key] = [];
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch (e) {
+      console.warn('[ChatService] Error clearing localStorage:', e);
+    }
+  }
+  return true;
+}
+

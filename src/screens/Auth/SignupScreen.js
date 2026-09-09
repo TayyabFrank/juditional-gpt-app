@@ -16,7 +16,7 @@ import Header from '../../components/Header';
 import { useAuth } from '../../context/AuthContext';
 
 export default function SignupScreen({ navigation }) {
-  const { signup, isLoadingAuth } = useAuth();
+  const { signup, isLoadingAuth, currentUser } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,7 +42,7 @@ export default function SignupScreen({ navigation }) {
     <SafeAreaView style={styles.safeArea}>
       <Header
         subtitle="Pakistan Law AI Portal"
-        onBack={() => navigation.goBack()}
+        onBack={currentUser ? () => navigation.goBack() : () => navigation.navigate('Login')}
       />
 
       <KeyboardAvoidingView
