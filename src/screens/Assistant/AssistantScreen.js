@@ -67,6 +67,8 @@ export default function AssistantScreen({ route, navigation }) {
     inputTextRef.current = text;
   };
 
+  const inputElementRef = useRef(null);
+
   // Robust Enter key listener for Web to send message immediately without clicking mouse
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -76,8 +78,9 @@ export default function AssistantScreen({ route, navigation }) {
           if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
             e.preventDefault();
             e.stopPropagation();
-            const text = (inputTextRef.current || '').trim();
+            const text = (active.value || inputTextRef.current || '').trim();
             if (text && !isAiThinkingRef.current && handleSendRef.current) {
+              active.value = '';
               handleSendRef.current(text);
             }
           }
@@ -85,8 +88,11 @@ export default function AssistantScreen({ route, navigation }) {
       };
 
       window.addEventListener('keydown', handleGlobalKeyDown, true);
+      document.addEventListener('keydown', handleGlobalKeyDown, true);
+
       return () => {
         window.removeEventListener('keydown', handleGlobalKeyDown, true);
+        document.removeEventListener('keydown', handleGlobalKeyDown, true);
       };
     }
   }, []);
@@ -477,6 +483,7 @@ export default function AssistantScreen({ route, navigation }) {
           </TouchableOpacity>
 
           <TextInput
+            ref={inputElementRef}
             style={styles.textInput}
             placeholder="Ask Pakistani legal question, cite section or FIR..."
             placeholderTextColor={colors.textMuted}
