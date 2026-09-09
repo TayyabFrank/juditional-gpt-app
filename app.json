@@ -22,6 +22,9 @@
         "backgroundColor": "#090d16"
       },
       "package": "com.judicialgpt.app"
-    }
+    },
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }
