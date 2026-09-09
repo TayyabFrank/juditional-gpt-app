@@ -99,6 +99,48 @@ export default function AssistantScreen({ route, navigation }) {
     }
   }, []);
 
+  // Ensure sleek dark emerald scrollbars are applied to the chatbot web view
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const styleId = 'judicialgpt-sleek-scrollbars';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          /* Modern Sleek Scrollbars */
+          *::-webkit-scrollbar, ::-webkit-scrollbar {
+            width: 6px !important;
+            height: 6px !important;
+          }
+          *::-webkit-scrollbar-track, ::-webkit-scrollbar-track {
+            background: #0f172a !important;
+            border-radius: 8px !important;
+          }
+          *::-webkit-scrollbar-thumb, ::-webkit-scrollbar-thumb {
+            background: #10b981 !important;
+            background-image: linear-gradient(180deg, #10b981 0%, #059669 100%) !important;
+            border-radius: 8px !important;
+            border: 1px solid rgba(16, 185, 129, 0.25) !important;
+          }
+          *::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:hover {
+            background: #34d399 !important;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
+          }
+          *::-webkit-scrollbar-button, ::-webkit-scrollbar-button {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+          }
+          * {
+            scrollbar-width: thin !important;
+            scrollbar-color: #10b981 #0f172a !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+  }, []);
+
   // Quick prompt chips
   const QUICK_PROMPTS = [
     { label: 'Bail Petition s.497', query: 'Draft grounds for post-arrest bail petition under Section 497 Cr.P.C. in a case of alleged cheque dishonour.' },
@@ -471,6 +513,8 @@ export default function AssistantScreen({ route, navigation }) {
             data={messages}
             keyExtractor={(item, index) => item.id || String(index)}
             contentContainerStyle={styles.messageList}
+            showsVerticalScrollIndicator={true}
+            style={styles.chatListScroll}
             renderItem={({ item }) => {
               const isUser = item.sender === 'user';
               return (
@@ -836,6 +880,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 11,
     lineHeight: 16,
+  },
+  chatListScroll: {
+    flex: 1,
+    paddingRight: 4,
   },
   messageList: {
     padding: 16,
